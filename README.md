@@ -4,7 +4,6 @@
 
 ## Project Overview
 Moodify is a web application that generates Spotify playlists based on the user's current mood. Users can log in with Spotify, select their mood, and receive a curated playlist with previews of tracks.  
-
 ---
 
 ## Features
