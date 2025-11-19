@@ -120,11 +120,8 @@ Moodify allows users to quickly generate playlists that match their current mood
 - Scopes required: `user-read-private`, `user-read-email`, `playlist-modify-public`, `playlist-modify-private`
 
 ### Key Endpoints Used
-- `/v1/me` - Get current user profile
-- `/v1/recommendations` - Generate track recommendations
-- `/v1/users/{user_id}/playlists` - Create playlists
-- `/v1/playlists/{playlist_id}/tracks` - Add tracks to playlist
-
+- `/me` - Get current user profile
+- `/me/playlist` - Generate track recommendations and Create playlists
 ---
 
 ## Feature Documentation
@@ -147,84 +144,16 @@ Moodify allows users to quickly generate playlists that match their current mood
 ---
 
 ### 2. Spotify OAuth Authentication (`auth_routes.py`)
-**Description**: Secure user authentication using Spotify's OAuth 2.0 flow, implemented through Flask backend routes.
+**Description**: Secure user authentication using Spotify's OAuth 2.0 flow, implemented through Flask backend routes. (this way avoid implementing a authentication system myself)
 
 **How it works**:
 1. **SpotifyOAuth Object Creation**: The `sp_oauth` object is instantiated in `auth_routes.py` with client credentials and redirect URI
 2. **Authorization URL Generation**: When user clicks "Login with Spotify", the backend calls `sp_oauth.get_authorize_url()` to generate the Spotify authorization URL
 3. **User Authorization**: User is redirected to Spotify's login page to grant permissions
-4. **Callback Handling**: After authorization, Spotify redirects to `/callback` route with an authorization code
+4. **Callback Handling**: After authorization, Spotify redirects to `/callback` route with an authorization code. (callback will store info and return these info to dashboard in json data format instead of raw data)
 5. **Token Exchange**: The callback route exchanges the code for access and refresh tokens using `sp_oauth.get_access_token()`
 6. **Session Storage**: Tokens are stored server-side in Flask session for security
 7. **Frontend Redirect**: After successful authentication, user is redirected to React frontend dashboard using Flask's `redirect()` function
-
-**Key Routes**:
-```python
-# auth_routes.py
-
-from spotipy.oauth2 import SpotifyOAuth
-
-# Initialize SpotifyOAuth object
-sp_oauth = SpotifyOAuth(
-    client_id=os.getenv('SPOTIFY_CLIENT_ID'),
-    client_secret=os.getenv('SPOTIFY_CLIENT_SECRET'),
-    redirect_uri=os.getenv('SPOTIFY_REDIRECT_URI'),
-    scope='user-read-private user-read-email playlist-modify-public'
-)
-
-@app.route('/login')
-def login():
-    """Generate and return Spotify authorization URL"""
-    auth_url = sp_oauth.get_authorize_url()
-    return jsonify({'auth_url': auth_url})
-
-@app.route('/callback')
-def callback():
-    """Handle OAuth callback and redirect to frontend dashboard"""
-    code = request.args.get('code')
-    token_info = sp_oauth.get_access_token(code)
-    
-    # Store tokens in session
-    session['token_info'] = token_info
-    
-    # Redirect to React frontend dashboard (not render_template)
-    return redirect('http://localhost:3000/dashboard')
-
-@app.route('/auth/status')
-def auth_status():
-    """Check if user is authenticated"""
-    token_info = session.get('token_info')
-    
-    if token_info:
-        # Check if token is expired
-        now = int(time.time())
-        is_expired = token_info['expires_at'] - now < 60
-        
-        if is_expired:
-            # Refresh the token
-            token_info = sp_oauth.refresh_access_token(token_info['refresh_token'])
-            session['token_info'] = token_info
-        
-        return jsonify({'authenticated': True})
-    
-    return jsonify({'authenticated': False})
-```
-
-**Frontend Integration**:
-```javascript
-// React component example
-const handleLogin = async () => {
-  const response = await fetch('http://localhost:5000/login');
-  const data = await response.json();
-  window.location.href = data.auth_url;
-};
-
-const checkAuthStatus = async () => {
-  const response = await fetch('http://localhost:5000/auth/status');
-  const data = await response.json();
-  return data.authenticated; // Returns true or false
-};
-```
 
 **Security Considerations**:
 - Tokens are stored server-side in Flask session only (never exposed to frontend)
@@ -236,7 +165,7 @@ const checkAuthStatus = async () => {
 ---
 
 ### 3. Track Preview Playback
-**Description**: Users can listen to 30-second previews of tracks before saving the playlist.
+**Description**: Users can listen to 30-second previews of tracks before saving the playlist. (This is not complete because the web api did not allow for preview)
 
 **How it works**:
 - Spotify API provides preview URLs for most tracks
@@ -271,22 +200,30 @@ recommendations = sp.recommendations(
 ---
 
 ### 5. Personalized Recommendations
-**Description**: Generate playlists based on user's listening history and favorite genres.
+
+**Description**:  
+Generate playlists based on the user's listening history and favorite genres.
 
 **How it works**:
 - Analyzes user's top artists and tracks
 - Extracts preferred genres
-- Uses these as seeds for recommendations
+- Uses these genres as seeds for recommendations
 - Combines mood parameters with personal preferences
 
-**API Usage**:
-- `/v1/me/top/artists` - Get user's top artists
-- `/v1/me/top/tracks` - Get user's top tracks
-- Used as seed data for `/v1/recommendations`
+**Logic Flow**:  
+Since the official Spotify Recommendations API was deprecated or limited, we cannot directly request recommendations based on genres. Instead:
 
+1. The backend searches for tracks by similar genres or related artists.
+2. Tracks are randomly selected to introduce variety and help users discover new music.
+3. Because of randomness, users might not like all the suggested tracks, but it increases exploration opportunities.
+
+**Notes**:
+- Genres are normalized to valid Spotify seeds before searching.
+- The recommendations are returned in JSON format via `jsonify` for frontend consumption.
+- Supports dynamic adjustment of playlist size and mood-based filtering.
 ---
 
-### 6. Save Playlist to Spotify
+### 6. Save Playlist to Spotify 
 **Description**: Premium users can save generated playlists directly to their Spotify account.
 
 **How it works**:
@@ -313,59 +250,22 @@ playlist = sp.user_playlist_create(
 sp.playlist_add_items(playlist['id'], track_uris)
 ```
 
----
 
-### [Add More Features Here]
+### 6. Deployment Checklist (Optional)
 
-### Template for Adding New Features:
-```markdown
-### X. [Feature Name]
-**Description**: [Brief description of what the feature does]
+> **Note:** This app will not be deployed publicly because:
+> - Spotify requires approval for production use.
+> - The app is intended for personal use and does not handle unlimited users.
+> - No database is needed; all data is stored in session or locally.
 
-**How it works**:
-- [Step 1]
-- [Step 2]
-- [Step 3]
-
-**Technical Details**:
-- [API endpoints used]
-- [Key functions/components]
-- [Data structures]
-
-**Usage Example**:
-```[language]
-[Code example if applicable]
-```
-
-**Limitations/Notes**:
-- [Any known limitations]
-- [Special requirements]
-```
-
----
-
-## Hosting
-
-### Deployment Options
-- **Frontend**: Vercel, Netlify, GitHub Pages
-- **Backend**: Heroku, Railway, AWS Elastic Beanstalk, Google Cloud Run
-
-### Environment Variables (Production)
-```
-SPOTIFY_CLIENT_ID=your_production_client_id
-SPOTIFY_CLIENT_SECRET=your_production_client_secret
-SPOTIFY_REDIRECT_URI=https://yourdomain.com/callback
-FLASK_SECRET_KEY=your_secure_secret_key
-DATABASE_URL=your_database_url (optional)
-```
-
-### Deployment Checklist
+**Checklist for deployment (if needed in the future):**
 - [ ] Update redirect URIs in Spotify Developer Dashboard
-- [ ] Enable HTTPS
+- [ ] Enable HTTPS for secure connections
 - [ ] Set secure environment variables
-- [ ] Configure CORS settings
+- [ ] Configure CORS settings for frontend-backend communication
 - [ ] Test OAuth flow in production
-- [ ] Monitor API rate limits
+- [ ] Monitor Spotify API rate limits
+
 
 ---
 
@@ -381,23 +281,6 @@ DATABASE_URL=your_database_url (optional)
 
 ---
 
-## Contributing
-
-We welcome contributions! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Contribution Guidelines
-- Follow existing code style
-- Add tests for new features
-- Update documentation
-- Ensure all tests pass before submitting PR
-
----
 
 ## License
 
