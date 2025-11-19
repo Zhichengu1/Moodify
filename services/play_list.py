@@ -109,17 +109,13 @@ def get_top_genres(sp, limit=5):
     """Get user's top genres from their favorite artists"""
     try:
         top_artists = sp.current_user_top_artists(limit=10, time_range="medium_term")
-            
         if not top_artists["items"]:
             print("⚠️  No top artists found")
             return []
-        
         all_genres = []
-        
         print("\n" + "="*50)
         print("🎤 Your Top Artists & Genres:")
         print("="*50)
-        
         for artist in top_artists["items"][:5]:
             genres = artist["genres"]
             all_genres.extend(genres)
@@ -128,7 +124,6 @@ def get_top_genres(sp, limit=5):
         # Get most common genres
         genre_counts = Counter(all_genres)
         top_genres = [genre for genre, count in genre_counts.most_common(10)]
-        
         print(f"\n📊 Most common: {', '.join(top_genres[:5])}")
         print("="*50 + "\n")
         
@@ -145,6 +140,7 @@ def get_recommendation_by_genres(sp, user_genres, limit=20):
     print(f"🔍 Getting {limit} recommendations via Search API for: {user_genres}...")
     
     songs = []
+    res = {}
     target_per_genre = (limit // len(user_genres)) + 1
     
     for genre in user_genres:
@@ -174,7 +170,6 @@ def get_recommendation_by_genres(sp, user_genres, limit=20):
                     "spotify_url": track["external_urls"]["spotify"],
                     "uri": track["uri"]
                 })
-                
         except Exception as e:
             print(f"⚠️ Could not search for genre '{genre}': {e}")
             continue
@@ -205,18 +200,15 @@ def create_playlist():
     try:
         top_genres = get_top_genres(sp)
         recommendations = get_recommendation_by_genres(sp, top_genres, 30)
-        
         return jsonify({
             "message": "Recommendations generated!",
             "recommendations": recommendations["tracks"][:10],
             "genres_used": recommendations["genres_used"],
             "total_available": recommendations["total_count"]
         })
-        
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
+    
 @me_bp.route("/favorite-songs", methods=["GET"])
 def get_top_songs():
     """Get user's favorite songs and recommendations"""
